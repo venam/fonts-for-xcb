@@ -9,4 +9,7 @@ Project roadmap:
 * Font rasterizing phase (freetype): use the pattern given from fontconfig
   to rasterize from the font file given
 
+* Font rendering using xrender extension: use both `xcb/render.h` and
+  `xcb/xcb_renderutil.h` to render and cache the glyphs used in the font
+
 * Join both inside an XCB wrapper

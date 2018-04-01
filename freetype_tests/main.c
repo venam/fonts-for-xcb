@@ -23,7 +23,7 @@ main(int argc, char** argv)
 	}
 
 	// lib, path, index, &face
-	error = FT_New_Face(library, "/usr/share/fonts/TTF/times.ttf", 0, &face);
+	error = FT_New_Face(library, argv[1], 0, &face);
 	if (error == FT_Err_Unknown_File_Format) {
 		puts("wrong file format");
 		return 1;
