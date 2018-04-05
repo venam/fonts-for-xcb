@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 
 #include <fontconfig/fontconfig.h>
 /*
@@ -10,6 +11,13 @@
  * https://www.freedesktop.org/software/fontconfig/fontconfig-devel/t1.html
  */
 
+struct utf_holder {
+	uint16_t *str;
+	unsigned int length;
+};
+static int utf_len(char *str);
+struct utf_holder char_to_uint16(char *str);
+
 int
 main(int argc, char** argv)
 {
@@ -18,7 +26,18 @@ main(int argc, char** argv)
 	FcResult result;
 	//FcValue p_value;
 	FcValue output_value;
+	FcValue charset;
 	//FcChar8* font_name;
+
+	struct utf_holder holder;
+	char *temp = "oค";
+	holder = char_to_uint16(temp);
+	FcChar16 character_to_search[] = {
+		holder.str[0],
+		holder.str[1]
+	};
+	printf("%02x %02x\n", character_to_search[0], character_to_search[1]);
+	free(holder.str);
 
 	if (argc < 2) {
 		puts("pass the font name to match");
@@ -98,7 +117,26 @@ main(int argc, char** argv)
 		// let's print the file location of the match
 		// output_value is a pointer to the value inside
 		result = FcPatternGet(pat_output, FC_FILE, 0, &output_value);
+		// here we skip checking result
 		FcValuePrint(output_value);
+		// let's inspect the "CharSet" attribute(Unicode <int>
+		// chars encoded by the font) to see if it contains the
+		// text we want to draw, otherwise we'll have to fallback
+		// to another font
+		result = FcPatternGet(pat_output, FC_CHARSET, 0, &charset);
+		FcValuePrint(charset);
+		status = FcCharSetHasChar(charset.u.c, character_to_search[0]);
+		if (status == FcFalse) {
+			puts("character_to_search1 was not found");
+		} else {
+			puts("character_to_search1 was found");
+		}
+		status = FcCharSetHasChar(charset.u.c, character_to_search[1]);
+		if (status == FcFalse) {
+			puts("character_to_search2 was not found");
+		} else {
+			puts("character_to_search2 was found");
+		}
 	} else if (result == FcResultNoMatch) {
 		puts("there wasn't a match");
 	} else {
@@ -115,5 +153,67 @@ main(int argc, char** argv)
 	FcFini();
 
 	return 0;
+}
+
+struct utf_holder
+char_to_uint16(char *str)
+{
+	struct utf_holder holder;
+	char *utf = str;
+	uint16_t *output = NULL;
+	int length = 0;
+	output = (uint16_t *)malloc(sizeof(uint16_t)*strlen(str));
+
+	while (*utf) {
+		uint16_t chr;
+		uint8_t *u8 = (uint8_t *) utf;
+
+		switch (utf_len(utf)) {
+		case 1:
+			chr = u8[0];
+			break;
+		case 2:
+			chr = (u8[0] & 0x1f) << 6 | (u8[1] & 0x3f);
+			break;
+		case 3:
+			chr = (u8[0] & 0xf) << 12 | (u8[1] & 0x3f) << 6 | (u8[2] & 0x3f);
+			break;
+		case 4:
+		case 5:
+		case 6:
+			chr = 0xfffd;
+			break;
+		}
+
+		//chr = chr >> 8 | chr << 8;
+		output[length] = chr;
+		utf += utf_len(utf);
+		length++;
+	}
+
+	holder.length = length;
+	holder.str = output;
+
+	return holder;
+}
+
+static int
+utf_len(char *str) {
+	uint8_t *utf = (uint8_t *)str;
+
+	if (utf[0] < 0x80)
+		return 1;
+	else if ((utf[0] & 0xe0) == 0xc0)
+		return 2;
+	else if ((utf[0] & 0xf0) == 0xe0)
+		return 3;
+	else if ((utf[0] & 0xf8) == 0xf0)
+		return 4;
+	else if ((utf[0] & 0xfc) == 0xf8)
+		return 5;
+	else if ((utf[0] & 0xfe) == 0xfc)
+		return 6;
+	else
+		return 1;
 }
 
