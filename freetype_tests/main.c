@@ -10,6 +10,7 @@ int
 main(int argc, char** argv)
 {
 	int error;
+	// this isn't thread safe
 	FT_Library library;
 	FT_Face face;
 	FT_UInt glyph_index;
