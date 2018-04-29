@@ -132,7 +132,7 @@ xcbft_extract_fontsearch_list(char *string)
 }
 
 void
-xcbft_free_patterns_holder(struct xcbft_patterns_holder patterns)
+xcbft_patterns_holder_destroy(struct xcbft_patterns_holder patterns)
 {
 	int i = 0;
 
@@ -164,7 +164,7 @@ main(int argc, char** argv)
 		FcPatternPrint(font_patterns.patterns[i]);
 	}
 
-	xcbft_free_patterns_holder(font_patterns);
+	xcbft_patterns_holder_destroy(font_patterns);
 
 	holder = char_to_uint32(argv[2]);
 	for (i = 0; i < holder.length; i++) {
