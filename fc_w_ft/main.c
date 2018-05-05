@@ -20,6 +20,17 @@
  * Finally return the glyphs positions in that loaded font (for testing)
  */
 
+struct xcbft_patterns_holder {
+	FcPattern **patterns;
+	uint8_t length;
+};
+
+struct xcbft_face_holder {
+	FT_Face *faces;
+	uint8_t length;
+	FT_Library library;
+};
+
 
 /*
  * Do the font queries through fontconfig and return the info
@@ -48,9 +59,6 @@ xcbft_query_fontsearch(FcChar8 *fontquery)
 
 	FcPatternDestroy(fc_finding_pattern);
 	if (result == FcResultMatch) {
-		// DEBUG
-		FcPatternPrint(pat_output);
-		// DEBUG
 		return pat_output;
 	} else if (result == FcResultNoMatch) {
 		fprintf(stderr, "there wasn't a match");
@@ -60,12 +68,6 @@ xcbft_query_fontsearch(FcChar8 *fontquery)
 	return NULL;
 }
 
-struct xcbft_patterns_holder {
-	FcPattern **patterns;
-	uint8_t length;
-};
-
-// need to store the size of the array somewhere
 struct xcbft_patterns_holder
 xcbft_query_fontsearch_all(FcStrSet *queries)
 {
@@ -92,7 +94,6 @@ xcbft_query_fontsearch_all(FcStrSet *queries)
 	FcChar8 *fontquery = NULL;
 	FcStrListFirst(iterator);
 	while ((fontquery = FcStrListNext(iterator)) != NULL) {
-		printf("fontquery: %s\n", fontquery);
 		font_pattern = xcbft_query_fontsearch(fontquery);
 		if (font_pattern != NULL) {
 			if (font_patterns.length + 1 > current_allocated) {
@@ -109,6 +110,73 @@ xcbft_query_fontsearch_all(FcStrSet *queries)
 	// end of safely iterate over set
 
 	return font_patterns;
+}
+
+struct xcbft_face_holder
+xcbft_load_faces(struct xcbft_patterns_holder patterns)
+{
+	int i;
+	struct xcbft_face_holder faces;
+	FcResult result;
+	FcValue fc_file, fc_index;
+	FT_Error error;
+	FT_Library library;
+
+	faces.length = 0;
+	error = FT_Init_FreeType(&library);
+	if (error != FT_Err_Ok) {
+		perror(NULL);
+		return faces;
+	}
+
+	// allocate the same size as patterns as it should be <= its length
+	faces.faces = malloc(sizeof(FT_Face)*patterns.length);
+	for (i = 0; i < patterns.length; i++) {
+		// get the information needed from the pattern
+		result = FcPatternGet(patterns.patterns[i], FC_FILE, 0, &fc_file);
+		if (result != FcResultMatch) {
+			fprintf(stderr, "font has not file location");
+			continue;
+		}
+		result = FcPatternGet(patterns.patterns[i], FC_INDEX, 0, &fc_index);
+		if (result != FcResultMatch) {
+			fprintf(stderr, "font has no index, using 0 by default");
+			fc_index.type = FcTypeInteger;
+			fc_index.u.i = 0;
+		}
+		// TODO: load more info like
+		//	transform matrix
+		//	autohint
+		//	hinting
+		//	size or pixelsize
+		//	verticallayout
+
+		// load the face
+		error = FT_New_Face(
+				library,
+				(const char *) fc_file.u.s,
+				fc_index.u.i,
+				&(faces.faces[faces.length]) );
+		if (error == FT_Err_Unknown_File_Format) {
+			fprintf(stderr, "wrong file format");
+			continue;
+		} else if (error == FT_Err_Cannot_Open_Resource) {
+			fprintf(stderr, "could not open resource");
+			continue;
+		} else if (error) {
+			fprintf(stderr, "another sort of error");
+			continue;
+		}
+		if (faces.faces[faces.length] == NULL) {
+			fprintf(stderr, "face was empty");
+			continue;
+		}
+		faces.length++;
+	}
+
+	faces.library = library;
+
+	return faces;
 }
 
 FcStrSet*
@@ -143,6 +211,20 @@ xcbft_patterns_holder_destroy(struct xcbft_patterns_holder patterns)
 	FcFini();
 }
 
+void
+xcbft_face_holder_destroy(struct xcbft_face_holder faces)
+{
+	int i = 0;
+
+	for (; i < faces.length; i++) {
+		FT_Done_Face(faces.faces[i]);
+	}
+	if (faces.faces) {
+		free(faces.faces);
+	}
+	FT_Done_FreeType(faces.library);
+}
+
 int
 main(int argc, char** argv)
 {
@@ -150,6 +232,7 @@ main(int argc, char** argv)
 	struct xcbft_patterns_holder font_patterns;
 	int i = 0;
 	struct utf_holder holder;
+	struct xcbft_face_holder faces;
 
 	if (argc < 3) {
 		puts("pass the fonts and the text");
@@ -163,6 +246,10 @@ main(int argc, char** argv)
 	for (i = 0; i < font_patterns.length; i++) {
 		FcPatternPrint(font_patterns.patterns[i]);
 	}
+
+
+	faces = xcbft_load_faces(font_patterns);
+	xcbft_face_holder_destroy(faces);
 
 	xcbft_patterns_holder_destroy(font_patterns);
 
