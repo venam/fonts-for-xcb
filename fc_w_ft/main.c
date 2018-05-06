@@ -118,7 +118,7 @@ xcbft_load_faces(struct xcbft_patterns_holder patterns)
 	int i;
 	struct xcbft_face_holder faces;
 	FcResult result;
-	FcValue fc_file, fc_index, fc_matrix;
+	FcValue fc_file, fc_index, fc_matrix, fc_pixel_size;
 	FT_Matrix ft_matrix;
 	FT_Error error;
 	FT_Library library;
@@ -148,7 +148,6 @@ xcbft_load_faces(struct xcbft_patterns_holder patterns)
 		// TODO: load more info like
 		//	autohint
 		//	hinting
-		//	size or pixelsize
 		//	verticallayout
 
 		// load the face
@@ -184,6 +183,24 @@ xcbft_load_faces(struct xcbft_patterns_holder patterns)
 				&ft_matrix,
 				NULL);
 		}
+
+		result = FcPatternGet(patterns.patterns[i], FC_PIXEL_SIZE, 0, &fc_pixel_size);
+		if (result != FcResultMatch) {
+			fprintf(stderr, "font has no pixel size, using 12 by default");
+			fc_pixel_size.type = FcTypeInteger;
+			fc_pixel_size.u.i = 12;
+		}
+		error = FT_Set_Pixel_Sizes(
+			faces.faces[faces.length],
+			0, // width
+			fc_pixel_size.u.i); // height
+
+		if (error != FT_Err_Ok) {
+			perror(NULL);
+			fprintf(stderr, "could not set pixel size");
+			continue;
+		}
+
 
 		faces.length++;
 	}
