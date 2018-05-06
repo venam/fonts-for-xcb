@@ -118,7 +118,8 @@ xcbft_load_faces(struct xcbft_patterns_holder patterns)
 	int i;
 	struct xcbft_face_holder faces;
 	FcResult result;
-	FcValue fc_file, fc_index;
+	FcValue fc_file, fc_index, fc_matrix;
+	FT_Matrix ft_matrix;
 	FT_Error error;
 	FT_Library library;
 
@@ -145,7 +146,6 @@ xcbft_load_faces(struct xcbft_patterns_holder patterns)
 			fc_index.u.i = 0;
 		}
 		// TODO: load more info like
-		//	transform matrix
 		//	autohint
 		//	hinting
 		//	size or pixelsize
@@ -171,6 +171,20 @@ xcbft_load_faces(struct xcbft_patterns_holder patterns)
 			fprintf(stderr, "face was empty");
 			continue;
 		}
+
+		result = FcPatternGet(patterns.patterns[i], FC_MATRIX, 0, &fc_matrix);
+		if (result == FcResultMatch) {
+			ft_matrix.xx = fc_matrix.u.m->xx;
+			ft_matrix.xy = fc_matrix.u.m->xy;
+			ft_matrix.yx = fc_matrix.u.m->yx;
+			ft_matrix.yy = fc_matrix.u.m->yy;
+			// apply the matrix
+			FT_Set_Transform(
+				faces.faces[faces.length],
+				&ft_matrix,
+				NULL);
+		}
+
 		faces.length++;
 	}
 
