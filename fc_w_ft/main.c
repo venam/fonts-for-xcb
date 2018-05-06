@@ -34,6 +34,26 @@ struct xcbft_face_holder {
 
 /*
  * Do the font queries through fontconfig and return the info
+ *
+ * TODO: fallback of font added to the list or somehow done when drawing,
+ *       to do that we need to search by the charset we want to draw
+ *       and if they are in one of the font already specified, thus need to
+ *       know what the users want to insert as text. This needs more thinking
+ *       to be decoupled.
+	// add characters we need to a charset
+	fccharset = FcCharSetCreate();
+	FcCharSetAddChar(fccharset, utf8string);
+	// copy the old pattern to get something close at least
+	fcpattern = FcPatternDuplicate(pattern);
+	// add the charset we want to it
+	FcPatternAddCharSet(fcpattern, FC_CHARSET, fccharset);
+	// also force it to be scalable
+	FcPatternAddBool(fcpattern, FC_SCALABLE, FcTrue);
+	// config & default substitutions, the usual
+	FcConfigSubstitute(NULL, fcpattern, FcMatchPattern);
+	FcDefaultSubstitute(fcpattern);
+	// and again a match, just like we do
+	match = FcFontMatch(NULL, fcpattern, &result);
  * Assumes:
  *	Fontconfig is already init & cleaned outside
  *	the FcPattern return needs to be cleaned outside
