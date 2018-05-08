@@ -31,29 +31,20 @@ struct xcbft_face_holder {
 	FT_Library library;
 };
 
+// signatures
+FcPattern* xcbft_query_fontsearch(FcChar8 *);
+struct xcbft_face_holder xcbft_query_by_char_support(
+		FcChar32, const FcPattern *, FT_Library);
+struct xcbft_patterns_holder xcbft_query_fontsearch_all(FcStrSet *);
+struct xcbft_face_holder xcbft_load_faces(struct xcbft_patterns_holder);
+FcStrSet* xcbft_extract_fontsearch_list(char *);
+void xcbft_patterns_holder_destroy(struct xcbft_patterns_holder);
+void xcbft_face_holder_destroy(struct xcbft_face_holder);
+
 
 /*
  * Do the font queries through fontconfig and return the info
  *
- * TODO: fallback of font added to the list or somehow done when drawing,
- *       to do that we need to search by the charset we want to draw
- *       and if they are in one of the font already specified, thus need to
- *       know what the users want to insert as text. This needs more thinking
- *       to be decoupled.
-	// add characters we need to a charset
-	fccharset = FcCharSetCreate();
-	FcCharSetAddChar(fccharset, utf8string);
-	// copy the old pattern to get something close at least
-	fcpattern = FcPatternDuplicate(pattern);
-	// add the charset we want to it
-	FcPatternAddCharSet(fcpattern, FC_CHARSET, fccharset);
-	// also force it to be scalable
-	FcPatternAddBool(fcpattern, FC_SCALABLE, FcTrue);
-	// config & default substitutions, the usual
-	FcConfigSubstitute(NULL, fcpattern, FcMatchPattern);
-	FcDefaultSubstitute(fcpattern);
-	// and again a match, just like we do
-	match = FcFontMatch(NULL, fcpattern, &result);
  * Assumes:
  *	Fontconfig is already init & cleaned outside
  *	the FcPattern return needs to be cleaned outside
@@ -86,6 +77,78 @@ xcbft_query_fontsearch(FcChar8 *fontquery)
 		fprintf(stderr, "the match wasn't as good as it should be");
 	}
 	return NULL;
+}
+
+/*
+ * Query a font based on character support
+ * Optionally pass a pattern that it'll use as the base for the search
+ *
+ * TODO: fallback of font added to the list or somehow done when drawing,
+ *       to do that we need to search by the charset we want to draw
+ *       and if they are in one of the font already specified, thus need to
+ *       know what the users want to insert as text. This needs more thinking
+ *       to be decoupled.
+
+	Assumes the ft2 library is already loaded
+	Assumes the face will be cleaned outside
+ */
+struct xcbft_face_holder
+xcbft_query_by_char_support(FcChar32 character,
+		const FcPattern *copy_pattern,
+		FT_Library library)
+{
+	FcBool status;
+	FcResult result;
+	FcCharSet *charset;
+	FcPattern *charset_pattern, *pat_output;
+	struct xcbft_patterns_holder patterns;
+	struct xcbft_face_holder faces;
+
+	faces.length = 0;
+
+	// add characters we need to a charset
+	charset = FcCharSetCreate();
+	FcCharSetAddChar(charset, character);
+
+	// if we pass a pattern then copy it to get something close
+	if (copy_pattern != NULL) {
+		charset_pattern = FcPatternDuplicate(copy_pattern);
+	} else {
+		charset_pattern = FcPatternCreate();
+	}
+
+	// use the charset for the pattern search
+	FcPatternAddCharSet(charset_pattern, FC_CHARSET, charset);
+	// also force it to be scalable
+	FcPatternAddBool(charset_pattern, FC_SCALABLE, FcTrue);
+
+	// default & config substitutions, the usual
+	FcDefaultSubstitute(charset_pattern);
+	status = FcConfigSubstitute(NULL, charset_pattern, FcMatchPattern);
+	if (status == FcFalse) {
+		fprintf(stderr, "could not perform config font substitution");
+		return faces;
+	}
+
+	pat_output = FcFontMatch(NULL, charset_pattern, &result);
+
+	FcPatternDestroy(charset_pattern);
+
+	if (result != FcResultMatch) {
+		fprintf(stderr, "there wasn't a match");
+		return faces;
+	}
+
+	patterns.patterns = malloc(sizeof(FcPattern *));
+	patterns.length = 1;
+	patterns.patterns[0] = pat_output;
+
+	faces = xcbft_load_faces(patterns);
+
+	// cleanup
+	xcbft_patterns_holder_destroy(patterns);
+
+	return faces;
 }
 
 struct xcbft_patterns_holder
@@ -281,9 +344,11 @@ main(int argc, char** argv)
 {
 	FcStrSet *fontsearch;
 	struct xcbft_patterns_holder font_patterns;
-	int i = 0;
+	int i = 0, j = 0;
+	int glyph_index;
 	struct utf_holder holder;
 	struct xcbft_face_holder faces;
+	struct xcbft_face_holder faces_for_unsupported;
 
 	if (argc < 3) {
 		puts("pass the fonts and the text");
@@ -300,15 +365,41 @@ main(int argc, char** argv)
 
 
 	faces = xcbft_load_faces(font_patterns);
-	xcbft_face_holder_destroy(faces);
 
 	xcbft_patterns_holder_destroy(font_patterns);
 
 	holder = char_to_uint32(argv[2]);
 	for (i = 0; i < holder.length; i++) {
-		printf("%02x\n", holder.str[i]);
+		printf("Checking support for character with hexcode: %02x\n", holder.str[i]);
+		// here do a mini test to check for face support of char
+		for (j = 0; j < faces.length; j++) {
+			//FT_Select_Charmap(faces.faces[j], ft_encoding_unicode);
+			glyph_index = FT_Get_Char_Index(faces.faces[j], holder.str[i]);
+			if (glyph_index != 0) {
+				break;
+			}
+		}
+		if (glyph_index != 0) {
+			printf("Supported, found glyph_index: %d\n", glyph_index);
+			printf("In family_name: %s\n", faces.faces[j]->family_name);
+			continue;
+		}
+
+		puts("Not supported, fallback, searching for font with character");
+		faces_for_unsupported = xcbft_query_by_char_support(
+				holder.str[i],
+				NULL,
+				faces.library);
+		if (faces_for_unsupported.length == 0) {
+			puts("No faces found supporting this character");
+		} else {
+			printf("Face found for character, family_name: %s\n",
+					faces_for_unsupported.faces[0]->family_name);
+			xcbft_face_holder_destroy(faces_for_unsupported);
+		}
 	}
 	utf_holder_destroy(holder);
+	xcbft_face_holder_destroy(faces);
 
 	return 0;
 }
