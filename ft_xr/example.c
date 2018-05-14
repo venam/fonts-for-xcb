@@ -202,6 +202,11 @@ xcbft_load_glyphset(
 				// draw a block using whatever font
 				xcbft_load_glyph(c, gs, faces.faces[0], text.str[i]);
 			} else {
+				FT_Set_Char_Size(
+						faces_for_unsupported.faces[0],
+						0,(faces.faces[0]->size->metrics.x_ppem/(96.0/72.0))*64,
+						96,96);
+
 				xcbft_load_glyph(c, gs,
 					faces_for_unsupported.faces[0],
 					text.str[i]);

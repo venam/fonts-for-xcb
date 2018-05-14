@@ -285,8 +285,8 @@ xcbft_load_faces(struct xcbft_patterns_holder patterns)
 		// pixel_size/ (resolution/72.0)
 		FT_Set_Char_Size(
 			faces.faces[faces.length], 0,
-			(fc_pixel_size.u.d/(90.0/72.0))*64,
-			90, 90);
+			(fc_pixel_size.u.d/(96.0/72.0))*64,
+			96, 96);
 		if (error != FT_Err_Ok) {
 			perror(NULL);
 			fprintf(stderr, "could not char size");
