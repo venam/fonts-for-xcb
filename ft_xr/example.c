@@ -9,7 +9,7 @@
 
 /* This is the final function we want to be using after loading the faces
  */
-xcb_bool32_t // TODO: think of something good to return, like status
+int // TODO: think of something good to return, like status
 xcbft_draw_text(
 	xcb_connection_t*, // conn
 	xcb_drawable_t, // win or pixmap
@@ -30,7 +30,7 @@ void
 xcbft_load_glyph(
 	xcb_connection_t *c, xcb_render_glyphset_t gs, FT_Face face, int charcode);
 
-xcb_bool32_t
+int
 xcbft_draw_text(
 	xcb_connection_t *c, // conn
 	xcb_drawable_t pmap, // win or pixmap
@@ -287,7 +287,7 @@ main(int argc, char** argv)
 	}
 
 	fontsearch = xcbft_extract_fontsearch_list(
-		"times:pixelsize=30");
+		"impact:style=italic:pixelsize=30");
 	// test fallback support also
 	text = char_to_uint32("Héllo World!A탄ཀ");
 	font_patterns = xcbft_query_fontsearch_all(fontsearch);
