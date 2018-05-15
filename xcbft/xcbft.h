@@ -307,10 +307,11 @@ xcbft_extract_fontsearch_list(char *string)
 	FcStrSet *fontsearch = NULL;
 	FcChar8 *fontquery;
 	FcBool result = FcFalse;
+	char *r = strdup(string);
 	
 	fontsearch = FcStrSetCreate();
 
-	while ( (fontquery = (FcChar8*)strsep(&string,",")) != NULL ) {
+	while ( (fontquery = (FcChar8*)strsep(&r,",")) != NULL ) {
 		result = FcStrSetAdd(fontsearch, fontquery);
 		if (result == FcFalse) {
 			fprintf(stderr,
