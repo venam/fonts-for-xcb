@@ -263,13 +263,6 @@ xcbft_load_faces(struct xcbft_patterns_holder patterns)
 
 		result = FcPatternGet(patterns.patterns[i], FC_MATRIX, 0, &fc_matrix);
 		if (result == FcResultMatch) {
-			puts("got a transformation matrix");
-			printf("xx:%f, xy:%f, yx:%f, yy:%f\n",
-				fc_matrix.u.m->xx,
-				fc_matrix.u.m->xy,
-				fc_matrix.u.m->yx,
-				fc_matrix.u.m->yy
-			);
 			ft_matrix.xx = (FT_Fixed)(fc_matrix.u.m->xx * 0x10000L);
 			ft_matrix.xy = (FT_Fixed)(fc_matrix.u.m->xy * 0x10000L);
 			ft_matrix.yx = (FT_Fixed)(fc_matrix.u.m->yx * 0x10000L);
@@ -401,13 +394,11 @@ xcbft_draw_text(
 			error->error_code);
 	}
 
-	puts("creating pen");
 	// create a 1x1 pixel pen (on repeat mode) of a certain color
 	xcb_render_picture_t fg_pen = xcbft_create_pen(c, color);
 
 	// load all the glyphs in a glyphset
 	// TODO: maybe cache the xcb_render_glyphset_t
-	puts("loading glyphset");
 	xcb_render_glyphset_t font = xcbft_load_glyphset(c, faces, text);
 
 	// we now have a text stream - a bunch of glyphs basically
@@ -415,12 +406,10 @@ xcbft_draw_text(
 		xcb_render_util_composite_text_stream(font, text.length, 0);
 
 	// draw the text at a certain positions
-	puts("rendering inside text stream");
 	xcb_render_util_glyphs_32(ts, x, y, text.length, text.str);
 
 	// finally render using the repeated pen color on the picture
 	// (which is related to the pixmap)
-	puts("composite text");
 	xcb_render_util_composite_text(
 		c, // connection
 		XCB_RENDER_PICT_OP_OVER, //op
@@ -576,7 +565,6 @@ xcbft_load_glyph(
 
 	for (y = 0; y < ginfo.height; y++)
 		memcpy(tmpbitmap+y*stride, bitmap->buffer+y*ginfo.width, ginfo.width);
-	printf("loading glyph %02x\n", charcode);
 
 	xcb_render_add_glyphs_checked(c,
 		gs, 1, &gid, &ginfo, stride*ginfo.height, tmpbitmap);
