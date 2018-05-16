@@ -1,272 +1,17 @@
 #include <xcb/xcb.h>
-#include <xcb/xcb_ewmh.h>
-#include <xcb/xcb_icccm.h>
-#include <xcb/render.h>
-// This is for the wrappers
-#include <xcb/xcb_renderutil.h>
 
 #include "../xcbft/xcbft.h"
 
-/* This is the final function we want to be using after loading the faces
- */
-int // TODO: think of something good to return, like status
-xcbft_draw_text(
-	xcb_connection_t*, // conn
-	xcb_drawable_t, // win or pixmap
-	int16_t, int16_t, // x, y
-	struct utf_holder, // text
-	xcb_render_color_t,
-	struct xcbft_face_holder); // faces
-
-xcb_render_picture_t xcbft_create_pen(
-	xcb_connection_t*, xcb_render_color_t);
-
-xcb_render_glyphset_t xcbft_load_glyphset(
-	xcb_connection_t *c,
-	struct xcbft_face_holder faces,
-	struct utf_holder text);
-
-void
-xcbft_load_glyph(
-	xcb_connection_t *c, xcb_render_glyphset_t gs, FT_Face face, int charcode);
-
 int
-xcbft_draw_text(
-	xcb_connection_t *c, // conn
-	xcb_drawable_t pmap, // win or pixmap
-	int16_t x, int16_t y, // x, y
-	struct utf_holder text, // text
-	xcb_render_color_t color,
-	struct xcbft_face_holder faces)
-{
-	xcb_void_cookie_t cookie;
-	uint32_t values[2];
-	xcb_generic_error_t *error;
-	xcb_render_picture_t picture;
-	xcb_render_pictforminfo_t *fmt;
-	const xcb_render_query_pict_formats_reply_t *fmt_rep =
-		xcb_render_util_query_formats(c);
-
-	fmt = xcb_render_util_find_standard_format(
-		fmt_rep,
-		XCB_PICT_STANDARD_RGB_24
-	);
-
-	// create the picture with its attribute and format
-	picture = xcb_generate_id(c);
-	values[0] = XCB_RENDER_POLY_MODE_IMPRECISE;
-	values[1] = XCB_RENDER_POLY_EDGE_SMOOTH;
-	cookie = xcb_render_create_picture_checked(c,
-		picture, // pid
-		pmap, // drawable from the user
-		fmt->id, // format
-		XCB_RENDER_CP_POLY_MODE|XCB_RENDER_CP_POLY_EDGE,
-		values); // make it smooth
-
-	error = xcb_request_check(c, cookie);
-	if (error) {
-		error->error_code;
-		fprintf(stderr, "ERROR: %s : %d\n",
-			"could not create picture",
-			error->error_code);
-	}
-
-	puts("creating pen");
-	// create a 1x1 pixel pen (on repeat mode) of a certain color
-	xcb_render_picture_t fg_pen = xcbft_create_pen(c, color);
-
-	// load all the glyphs in a glyphset
-	// TODO: maybe cache the xcb_render_glyphset_t
-	puts("loading glyphset");
-	xcb_render_glyphset_t font = xcbft_load_glyphset(c, faces, text);
-
-	// we now have a text stream - a bunch of glyphs basically
-	xcb_render_util_composite_text_stream_t *ts =
-		xcb_render_util_composite_text_stream(font, text.length, 0);
-
-	// draw the text at a certain positions
-	puts("rendering inside text stream");
-	xcb_render_util_glyphs_32(ts, x, y, text.length, text.str);
-
-	// finally render using the repeated pen color on the picture
-	// (which is related to the pixmap)
-	puts("composite text");
-	xcb_render_util_composite_text(
-		c, // connection
-		XCB_RENDER_PICT_OP_OVER, //op
-		fg_pen, // src
-		picture, // dst
-		0, // fmt
-		0, // src x
-		0, // src y
-		ts); // txt stream
-
-	xcb_render_free_picture(c, picture);
-	xcb_render_free_picture(c, fg_pen);
-
-	return 0;
-}
-
-xcb_render_picture_t
-xcbft_create_pen(xcb_connection_t *c, xcb_render_color_t color)
-{
-	xcb_render_pictforminfo_t *fmt;
-	const xcb_render_query_pict_formats_reply_t *fmt_rep =
-		xcb_render_util_query_formats(c);
-	// alpha can only be used with a picture containing a pixmap
-	fmt = xcb_render_util_find_standard_format(
-		fmt_rep,
-		XCB_PICT_STANDARD_ARGB_32
-	);
-
-	xcb_drawable_t root = xcb_setup_roots_iterator(
-			xcb_get_setup(c)
-		).data->root;
-
-	xcb_pixmap_t pm = xcb_generate_id(c);
-	xcb_create_pixmap(c, 32, pm, root, 1, 1);
-
-	uint32_t values[1];
-	values[0] = XCB_RENDER_REPEAT_NORMAL;
-
-	xcb_render_picture_t picture = xcb_generate_id(c);
-	xcb_render_create_picture(c,
-		picture,
-		pm,
-		fmt->id,
-		XCB_RENDER_CP_REPEAT,
-		values);
-
-	xcb_rectangle_t rect = {
-		.x = 0,
-		.y = 0,
-		.width = 1,
-		.height = 1
-	};
-
-	xcb_render_fill_rectangles(c,
-		XCB_RENDER_PICT_OP_OVER,
-		picture,
-		color, 1, &rect);
-
-	xcb_free_pixmap(c, pm);
-	return picture;
-}
-
-xcb_render_glyphset_t
-xcbft_load_glyphset(
-	xcb_connection_t *c,
-	struct xcbft_face_holder faces,
-	struct utf_holder text)
-{
-	int i, j;
-	int glyph_index;
-	xcb_render_glyphset_t gs;
-	xcb_render_pictforminfo_t *fmt_a8;
-	struct xcbft_face_holder faces_for_unsupported;
-	const xcb_render_query_pict_formats_reply_t *fmt_rep =
-		xcb_render_util_query_formats(c);
-
-	// create a glyphset with a specific format
-	fmt_a8 = xcb_render_util_find_standard_format(
-		fmt_rep,
-		XCB_PICT_STANDARD_A_8
-	);
-	gs = xcb_generate_id (c);
-	xcb_render_create_glyph_set(c, gs, fmt_a8->id);
-
-	for (i = 0; i < text.length; i++) {
-		for (j = 0; j < faces.length; j++) {
-			glyph_index = FT_Get_Char_Index(
-				faces.faces[j],
-				text.str[i]);
-			if (glyph_index != 0) {
-				break;
-			}
-		}
-		// here use face at index j
-		if (glyph_index != 0) {
-			xcbft_load_glyph(c, gs, faces.faces[j], text.str[i]);
-		} else {
-		// fallback
-			// TODO pass at least some of the query (font
-			// size, italic, etc..)
-			faces_for_unsupported = xcbft_query_by_char_support(
-					text.str[i],
-					NULL,
-					faces.library);
-			if (faces_for_unsupported.length == 0) {
-				fprintf(stderr,
-					"No faces found supporting character: %02x\n",
-					text.str[i]);
-				// draw a block using whatever font
-				xcbft_load_glyph(c, gs, faces.faces[0], text.str[i]);
-			} else {
-				FT_Set_Char_Size(
-						faces_for_unsupported.faces[0],
-						0,(faces.faces[0]->size->metrics.x_ppem/(96.0/72.0))*64,
-						96,96);
-
-				xcbft_load_glyph(c, gs,
-					faces_for_unsupported.faces[0],
-					text.str[i]);
-				xcbft_face_holder_destroy(faces_for_unsupported);
-			}
-		}
-	}
-
-	return gs;
-}
-
-void
-xcbft_load_glyph(
-	xcb_connection_t *c, xcb_render_glyphset_t gs, FT_Face face, int charcode)
-{
-	uint32_t gid;
-	xcb_render_glyphinfo_t ginfo;
-
-	FT_Select_Charmap(face , ft_encoding_unicode);
-	int glyph_index = FT_Get_Char_Index(face, charcode);
-	FT_Load_Glyph(face, glyph_index, FT_LOAD_RENDER | FT_LOAD_FORCE_AUTOHINT);
-	
-	FT_Bitmap *bitmap = &face->glyph->bitmap;
-	ginfo.x = -face->glyph->bitmap_left;
-	ginfo.y = face->glyph->bitmap_top;
-	ginfo.width = bitmap->width;
-	ginfo.height = bitmap->rows;
-	ginfo.x_off = face->glyph->advance.x/64;
-	ginfo.y_off = face->glyph->advance.y/64;
-
-	gid=charcode;
-	
-	int stride=(ginfo.width+3)&~3;
-	uint8_t tmpbitmap[stride*ginfo.height];
-	int y;
-	for(y=0; y<ginfo.height; y++)
-		memcpy(tmpbitmap+y*stride, bitmap->buffer+y*ginfo.width, ginfo.width);
-	printf("loading glyph %02x\n", charcode);
-	
-	xcb_render_add_glyphs_checked(c,
-		gs, 1, &gid, &ginfo, stride*ginfo.height, tmpbitmap);
-
-	xcb_flush(c);
-}
-
-
-// END OF FUNCTIONS START OF TESTING
-
-int
-main(int argc, char** argv)
+main(int argc, char **argv)
 {
 	xcb_connection_t *c;
 	xcb_generic_event_t *e;
 	xcb_screen_t *screen;
-	xcb_void_cookie_t cookie;
 	xcb_drawable_t win;
 	xcb_drawable_t root;
 	uint32_t mask = 0;
 	uint32_t values[2];
-	const char win_title[] = "Test XCB fonts";
 	xcb_gcontext_t gc;
 	xcb_render_color_t text_color;
 
@@ -291,10 +36,10 @@ main(int argc, char** argv)
 		return 1;
 	}
 
-	fontsearch = xcbft_extract_fontsearch_list(
-		"impact:style=italic:pixelsize=30");
+    char *searchlist = "times:style=bold:pixelsize=30,monospace:pixelsize=40\n";
+	fontsearch = xcbft_extract_fontsearch_list(searchlist);
 	// test fallback support also
-	text = char_to_uint32("Héllo World!A탄ཀ");
+	text = char_to_uint32("Héllo ༃𐤋𐤊탄ཀ𐍊");
 	font_patterns = xcbft_query_fontsearch_all(fontsearch);
 	FcStrSetDestroy(fontsearch);
 	faces = xcbft_load_faces(font_patterns);
@@ -314,7 +59,7 @@ main(int argc, char** argv)
 	values[0] = screen->white_pixel;
 	values[1] = XCB_EVENT_MASK_EXPOSURE | XCB_EVENT_MASK_KEY_PRESS;
 
-	xcb_create_window (c,                          /* connection    */
+	xcb_create_window(c,                          /* connection    */
 			XCB_COPY_FROM_PARENT,          /* depth         */
 			win,                           /* window Id     */
 			root,                          /* parent window */
@@ -334,6 +79,7 @@ main(int argc, char** argv)
 
 	// pixmap to keep our drawing in memory
 	xcb_pixmap_t pmap = xcb_generate_id(c);
+
 	xcb_create_pixmap(c,
 		screen->root_depth,
 		pmap,
@@ -366,6 +112,7 @@ main(int argc, char** argv)
 
 	while ((e = xcb_wait_for_event(c))) {
 		xcb_generic_error_t *err = (xcb_generic_error_t *)e;
+
 		switch (e->response_type & ~0x80) {
 		case XCB_EXPOSE:
 			// We draw the pixmap
@@ -384,23 +131,24 @@ main(int argc, char** argv)
 			break;
 		case XCB_KEY_PRESS: {
 			xcb_key_press_event_t *kr = (xcb_key_press_event_t *)e;
+
 			switch (kr->detail) {
 			case 9: /* escape */
 			case 24: /* Q */
-				goto endloop;
+goto endloop;
 			}
 		}
 		case 0:
 			printf("Received X11 error %d\n", err->error_code);
 		}
-		free (e);
+		free(e);
 	}
-	endloop:
+endloop:
 	puts("end");
 
 	xcb_free_pixmap(c, pmap);
 	xcb_free_gc(c, gc);
-	xcb_disconnect (c);
+	xcb_disconnect(c);
 	// XXX: DEBUG
 
 	utf_holder_destroy(text);

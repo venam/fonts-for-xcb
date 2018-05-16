@@ -1,6 +1,10 @@
 PKGS = xcb xcb-render xcb-ewmh xcb-renderutil xcb-icccm freetype2 fontconfig
-CFLAGS = -Wall -Werror -Wno-unused `pkg-config --cflags $(PKGS)` -g
-LDLIBS = `pkg-config --libs $(PKGS)` -lm
+CFLAGS = -Wall -Werror -pedantic `pkg-config --cflags $(PKGS)` -g -fstack-protector-all
+#LDFLAGS=-Wl,--no-as-needed
+LDLIBS = `pkg-config --libs $(PKGS)`
 
 ex: example
+
+clean:
+	rm -f example
 
