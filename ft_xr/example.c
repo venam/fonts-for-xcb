@@ -145,6 +145,7 @@ goto endloop;
 	}
 endloop:
 	puts("end");
+        if (e) free(e);
 
 	xcb_free_pixmap(c, pmap);
 	xcb_free_gc(c, gc);

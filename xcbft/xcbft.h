@@ -134,6 +134,7 @@ xcbft_query_by_char_support(FcChar32 character,
 	status = FcConfigSubstitute(NULL, charset_pattern, FcMatchPattern);
 	if (status == FcFalse) {
 		fprintf(stderr, "could not perform config font substitution");
+		FcCharSetDestroy(charset);
 		return faces;
 	}
 
@@ -143,6 +144,7 @@ xcbft_query_by_char_support(FcChar32 character,
 
 	if (result != FcResultMatch) {
 		fprintf(stderr, "there wasn't a match");
+		FcCharSetDestroy(charset);
 		return faces;
 	}
 
@@ -154,6 +156,7 @@ xcbft_query_by_char_support(FcChar32 character,
 
 	// cleanup
 	xcbft_patterns_holder_destroy(patterns);
+	FcCharSetDestroy(charset);
 
 	return faces;
 }
@@ -314,7 +317,8 @@ xcbft_extract_fontsearch_list(char *string)
 	FcChar8 *fontquery;
 	FcBool result = FcFalse;
 	char *r = strdup(string);
-	
+	char *p_to_r = r;
+
 	fontsearch = FcStrSetCreate();
 
 	while ( (fontquery = (FcChar8*)strsep(&r,",")) != NULL ) {
@@ -324,6 +328,8 @@ xcbft_extract_fontsearch_list(char *string)
 				"Couldn't add fontquery to fontsearch set");
 		}
 	}
+
+	free(p_to_r);
 
 	return fontsearch;
 }
@@ -420,8 +426,10 @@ xcbft_draw_text(
 		0, // src y
 		ts); // txt stream
 
+	xcb_render_util_composite_text_free(ts);
 	xcb_render_free_picture(c, picture);
 	xcb_render_free_picture(c, fg_pen);
+	xcb_render_util_disconnect(c);
 
 	return 0;
 }
