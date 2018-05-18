@@ -568,7 +568,7 @@ xcbft_load_glyph(
 	gid = charcode;
 
 	int stride = (ginfo.width+3)&~3;
-	uint8_t tmpbitmap[stride*ginfo.height];
+	uint8_t *tmpbitmap = calloc(sizeof(uint8_t),stride*ginfo.height);
 	int y;
 
 	for (y = 0; y < ginfo.height; y++)
@@ -576,6 +576,8 @@ xcbft_load_glyph(
 
 	xcb_render_add_glyphs_checked(c,
 		gs, 1, &gid, &ginfo, stride*ginfo.height, tmpbitmap);
+
+	free(tmpbitmap);
 
 	xcb_flush(c);
 }
