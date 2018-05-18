@@ -495,6 +495,7 @@ xcbft_load_glyphset(
 	const xcb_render_query_pict_formats_reply_t *fmt_rep =
 		xcb_render_util_query_formats(c);
 
+	glyph_index = 0;
 	// create a glyphset with a specific format
 	fmt_a8 = xcb_render_util_find_standard_format(
 		fmt_rep,
