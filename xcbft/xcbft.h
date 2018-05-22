@@ -43,7 +43,7 @@ struct xcbft_face_holder xcbft_load_faces(struct xcbft_patterns_holder);
 FcStrSet* xcbft_extract_fontsearch_list(char *);
 void xcbft_patterns_holder_destroy(struct xcbft_patterns_holder);
 void xcbft_face_holder_destroy(struct xcbft_face_holder);
-int xcbft_draw_text(xcb_connection_t*, xcb_drawable_t,
+FT_Vector xcbft_draw_text(xcb_connection_t*, xcb_drawable_t,
 	int16_t, int16_t, struct utf_holder, xcb_render_color_t,
 	struct xcbft_face_holder);
 xcb_render_picture_t xcbft_create_pen(xcb_connection_t*,
@@ -366,7 +366,7 @@ xcbft_face_holder_destroy(struct xcbft_face_holder faces)
 }
 
 // TODO: return the x (y for vertical) position reached at the end of the text
-int
+FT_Vector
 xcbft_draw_text(
 	xcb_connection_t *c, // conn
 	xcb_drawable_t pmap, // win or pixmap
@@ -440,7 +440,7 @@ xcbft_draw_text(
 	xcb_render_free_picture(c, fg_pen);
 	xcb_render_util_disconnect(c);
 
-	return glyphset_advance.advance.x;
+	return glyphset_advance.advance;
 }
 
 xcb_render_picture_t

@@ -97,21 +97,21 @@ main(int argc, char **argv)
 	text_color.blue = 0x4242;
 	text_color.alpha = 0xFFFF;
 
-	int advance = xcbft_draw_text(
+	FT_Vector advance = xcbft_draw_text(
 		c,
 		pmap, // win or pixmap
 		50, 60, // x, y
 		text, // text
 		text_color,
 		faces); // faces
-	printf("advance: %d\n", advance);
+	printf("advance: %ld\n", advance.x);
 	// draw a rectangle at that place to know the advance was
 	// calculated properly
 	mask = XCB_GC_FOREGROUND | XCB_GC_GRAPHICS_EXPOSURES;
 	values[0] = 0xFF0000 | 0xff000000;
 	values[1] = 0;
 	xcb_change_gc(c, gc, mask, values);
-	rectangles[0].x = 50+advance;
+	rectangles[0].x = 50+advance.x;
 	rectangles[0].y = 60;
 	rectangles[0].width = 10;
 	rectangles[0].height = 10;
