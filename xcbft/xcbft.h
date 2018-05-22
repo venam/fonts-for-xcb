@@ -29,6 +29,11 @@ struct xcbft_face_holder {
 	FT_Library library;
 };
 
+struct xcbft_glyphset_and_advance {
+	xcb_render_glyphset_t glyphset;
+	FT_Vector advance;
+};
+
 // signatures
 FcPattern* xcbft_query_fontsearch(FcChar8 *);
 struct xcbft_face_holder xcbft_query_by_char_support(
@@ -43,9 +48,9 @@ int xcbft_draw_text(xcb_connection_t*, xcb_drawable_t,
 	struct xcbft_face_holder);
 xcb_render_picture_t xcbft_create_pen(xcb_connection_t*,
 		xcb_render_color_t);
-xcb_render_glyphset_t xcbft_load_glyphset(xcb_connection_t *,
+struct xcbft_glyphset_and_advance xcbft_load_glyphset(xcb_connection_t *,
 	struct xcbft_face_holder, struct utf_holder);
-void xcbft_load_glyph(xcb_connection_t *, xcb_render_glyphset_t,
+FT_Vector xcbft_load_glyph(xcb_connection_t *, xcb_render_glyphset_t,
 	FT_Face, int);
 
 
@@ -360,6 +365,7 @@ xcbft_face_holder_destroy(struct xcbft_face_holder faces)
 	FT_Done_FreeType(faces.library);
 }
 
+// TODO: return the x (y for vertical) position reached at the end of the text
 int
 xcbft_draw_text(
 	xcb_connection_t *c, // conn
@@ -405,11 +411,14 @@ xcbft_draw_text(
 
 	// load all the glyphs in a glyphset
 	// TODO: maybe cache the xcb_render_glyphset_t
-	xcb_render_glyphset_t font = xcbft_load_glyphset(c, faces, text);
+	struct xcbft_glyphset_and_advance glyphset_advance =
+		xcbft_load_glyphset(c, faces, text);
 
 	// we now have a text stream - a bunch of glyphs basically
 	xcb_render_util_composite_text_stream_t *ts =
-		xcb_render_util_composite_text_stream(font, text.length, 0);
+		xcb_render_util_composite_text_stream(
+				glyphset_advance.glyphset,
+				text.length, 0);
 
 	// draw the text at a certain positions
 	xcb_render_util_glyphs_32(ts, x, y, text.length, text.str);
@@ -431,7 +440,7 @@ xcbft_draw_text(
 	xcb_render_free_picture(c, fg_pen);
 	xcb_render_util_disconnect(c);
 
-	return 0;
+	return glyphset_advance.advance.x;
 }
 
 xcb_render_picture_t
@@ -481,7 +490,7 @@ xcbft_create_pen(xcb_connection_t *c, xcb_render_color_t color)
 	return picture;
 }
 
-xcb_render_glyphset_t
+struct xcbft_glyphset_and_advance
 xcbft_load_glyphset(
 	xcb_connection_t *c,
 	struct xcbft_face_holder faces,
@@ -494,7 +503,10 @@ xcbft_load_glyphset(
 	struct xcbft_face_holder faces_for_unsupported;
 	const xcb_render_query_pict_formats_reply_t *fmt_rep =
 		xcb_render_util_query_formats(c);
+	FT_Vector total_advance, glyph_advance;
+	struct xcbft_glyphset_and_advance glyphset_advance;
 
+	total_advance.x = total_advance.y = 0;
 	glyph_index = 0;
 	// create a glyphset with a specific format
 	fmt_a8 = xcb_render_util_find_standard_format(
@@ -513,7 +525,9 @@ xcbft_load_glyphset(
 		}
 		// here use face at index j
 		if (glyph_index != 0) {
-			xcbft_load_glyph(c, gs, faces.faces[j], text.str[i]);
+			glyph_advance = xcbft_load_glyph(c, gs, faces.faces[j], text.str[i]);
+			total_advance.x += glyph_advance.x;
+			total_advance.y += glyph_advance.y;
 		} else {
 		// fallback
 			// TODO pass at least some of the query (font
@@ -527,44 +541,56 @@ xcbft_load_glyphset(
 					"No faces found supporting character: %02x\n",
 					text.str[i]);
 				// draw a block using whatever font
-				xcbft_load_glyph(c, gs, faces.faces[0], text.str[i]);
+				glyph_advance = xcbft_load_glyph(c, gs, faces.faces[0], text.str[i]);
+				total_advance.x += glyph_advance.x;
+				total_advance.y += glyph_advance.y;
 			} else {
 				FT_Set_Char_Size(
 						faces_for_unsupported.faces[0],
 						0, (faces.faces[0]->size->metrics.x_ppem/(96.0/72.0))*64,
 						96, 96);
 
-				xcbft_load_glyph(c, gs,
+				glyph_advance = xcbft_load_glyph(c, gs,
 					faces_for_unsupported.faces[0],
 					text.str[i]);
+				total_advance.x += glyph_advance.x;
+				total_advance.y += glyph_advance.y;
+
 				xcbft_face_holder_destroy(faces_for_unsupported);
 			}
 		}
 	}
 
-	return gs;
+	glyphset_advance.advance = total_advance;
+	glyphset_advance.glyphset = gs;
+	return glyphset_advance;
 }
 
-void
+FT_Vector
 xcbft_load_glyph(
 	xcb_connection_t *c, xcb_render_glyphset_t gs, FT_Face face, int charcode)
 {
 	uint32_t gid;
+	int glyph_index;
+	FT_Vector glyph_advance;
 	xcb_render_glyphinfo_t ginfo;
+	FT_Bitmap *bitmap;
 
 	FT_Select_Charmap(face, ft_encoding_unicode);
-	int glyph_index = FT_Get_Char_Index(face, charcode);
+	glyph_index = FT_Get_Char_Index(face, charcode);
 
 	FT_Load_Glyph(face, glyph_index, FT_LOAD_RENDER | FT_LOAD_FORCE_AUTOHINT);
 
-	FT_Bitmap *bitmap = &face->glyph->bitmap;
+	bitmap = &face->glyph->bitmap;
 
 	ginfo.x = -face->glyph->bitmap_left;
 	ginfo.y = face->glyph->bitmap_top;
 	ginfo.width = bitmap->width;
 	ginfo.height = bitmap->rows;
-	ginfo.x_off = face->glyph->advance.x/64;
-	ginfo.y_off = face->glyph->advance.y/64;
+	glyph_advance.x = face->glyph->advance.x/64;
+	glyph_advance.y = face->glyph->advance.y/64;
+	ginfo.x_off = glyph_advance.x;
+	ginfo.y_off = glyph_advance.y;
 
 	gid = charcode;
 
@@ -581,6 +607,7 @@ xcbft_load_glyph(
 	free(tmpbitmap);
 
 	xcb_flush(c);
+	return glyph_advance;
 }
 
 #endif // _XCBFT

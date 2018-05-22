@@ -97,13 +97,26 @@ main(int argc, char **argv)
 	text_color.blue = 0x4242;
 	text_color.alpha = 0xFFFF;
 
-	xcbft_draw_text(
+	int advance = xcbft_draw_text(
 		c,
 		pmap, // win or pixmap
 		50, 60, // x, y
 		text, // text
 		text_color,
 		faces); // faces
+	printf("advance: %d\n", advance);
+	// draw a rectangle at that place to know the advance was
+	// calculated properly
+	mask = XCB_GC_FOREGROUND | XCB_GC_GRAPHICS_EXPOSURES;
+	values[0] = 0xFF0000 | 0xff000000;
+	values[1] = 0;
+	xcb_change_gc(c, gc, mask, values);
+	rectangles[0].x = 50+advance;
+	rectangles[0].y = 60;
+	rectangles[0].width = 10;
+	rectangles[0].height = 10;
+	xcb_poly_fill_rectangle(c, pmap, gc, 1, rectangles);
+
 	// TODO: end of tricky part
 
 	// show the window and start the event loop
