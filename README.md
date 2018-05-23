@@ -18,6 +18,7 @@ Project roadmap:
 
 - Add documentation
 - Add dpi support via xrm
+- Add a way to get the space (width, and height) required by a string of text
 - Fallback support for search similar to initial fontquery
 - Check if bold is working properly
 - Check return codes of functions and comments
