@@ -623,53 +623,50 @@ xcbft_get_dpi(xcb_connection_t *c)
 	xcb_xrm_database_t *xrm_db;
 	xcb_screen_iterator_t iter;
 
-	i = 0;
-	// default to something common just in case everything else fails
-	dpi = 96;
 	xrm_db = xcb_xrm_database_from_default(c);
 	if (xrm_db != NULL) {
 		i = xcb_xrm_resource_get_long(xrm_db, "Xft.dpi", NULL, &dpi);
+		xcb_xrm_database_free(xrm_db);
 		if (i < 0) {
 			fprintf(stderr,
 				"Could not fetch value of Xft.dpi from Xresources falling back to highest dpi found");
+		} else {
+			return dpi;
 		}
-		xcb_xrm_database_free(xrm_db);
 	} else {
 		fprintf(stderr,
 			"Could not open Xresources database falling back to highest dpi found");
 	}
 
-	if ( xrm_db == NULL || i < 0) {
-		iter = xcb_setup_roots_iterator(xcb_get_setup(c));
-		dpi = 0;
-		for (; iter.rem; xcb_screen_next(&iter)) {
-			/*
-			* Inspired by xdpyinfo
-			*
-			* there are 2.54 centimeters to an inch; so
-			* there are 25.4 millimeters.
-			*
-			* dpi = N pixels / (M millimeters / (25.4 millimeters / 1 inch))
-			*     = N pixels / (M inch / 25.4)
-			*     = N * 25.4 pixels / M inch
-			*/
-			if (iter.data != NULL) {
-				xres = ((((double) iter.data->width_in_pixels) * 25.4) /
-					((double) iter.data->width_in_millimeters));
+	iter = xcb_setup_roots_iterator(xcb_get_setup(c));
+	dpi = 0;
+	for (; iter.rem; xcb_screen_next(&iter)) {
+		/*
+		* Inspired by xdpyinfo
+		*
+		* there are 2.54 centimeters to an inch; so
+		* there are 25.4 millimeters.
+		*
+		* dpi = N pixels / (M millimeters / (25.4 millimeters / 1 inch))
+		*     = N pixels / (M inch / 25.4)
+		*     = N * 25.4 pixels / M inch
+		*/
+		if (iter.data != NULL) {
+			xres = ((((double) iter.data->width_in_pixels) * 25.4) /
+				((double) iter.data->width_in_millimeters));
 
-				// ignore y resolution for now
-				//yres = ((((double) iter.data->height_in_pixels) * 25.4) /
-				//	((double) iter.data->height_in_millimeters));
-				if (xres > dpi) {
-					dpi = xres;
-				}
+			// ignore y resolution for now
+			//yres = ((((double) iter.data->height_in_pixels) * 25.4) /
+			//	((double) iter.data->height_in_millimeters));
+			if (xres > dpi) {
+				dpi = xres;
 			}
 		}
+	}
 
-		if (dpi == 0) {
-			// if everything fails use 96
-			dpi = 96;
-		}
+	if (dpi == 0) {
+		// if everything fails use 96
+		dpi = 96;
 	}
 
 	return dpi;
