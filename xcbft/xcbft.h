@@ -15,6 +15,7 @@
 #include <xcb/xcb.h>
 #include <xcb/render.h>
 #include <xcb/xcb_renderutil.h>
+#include <xcb/xcb_xrm.h>
 
 #include "../utf8_utils/utf8.h"
 
@@ -37,21 +38,23 @@ struct xcbft_glyphset_and_advance {
 // signatures
 FcPattern* xcbft_query_fontsearch(FcChar8 *);
 struct xcbft_face_holder xcbft_query_by_char_support(
-		FcChar32, const FcPattern *, FT_Library);
+		FcChar32, const FcPattern *, FT_Library, long);
 struct xcbft_patterns_holder xcbft_query_fontsearch_all(FcStrSet *);
-struct xcbft_face_holder xcbft_load_faces(struct xcbft_patterns_holder);
+struct xcbft_face_holder xcbft_load_faces(
+	struct xcbft_patterns_holder, long);
 FcStrSet* xcbft_extract_fontsearch_list(char *);
 void xcbft_patterns_holder_destroy(struct xcbft_patterns_holder);
 void xcbft_face_holder_destroy(struct xcbft_face_holder);
 FT_Vector xcbft_draw_text(xcb_connection_t*, xcb_drawable_t,
 	int16_t, int16_t, struct utf_holder, xcb_render_color_t,
-	struct xcbft_face_holder);
+	struct xcbft_face_holder, long);
 xcb_render_picture_t xcbft_create_pen(xcb_connection_t*,
 		xcb_render_color_t);
 struct xcbft_glyphset_and_advance xcbft_load_glyphset(xcb_connection_t *,
-	struct xcbft_face_holder, struct utf_holder);
+	struct xcbft_face_holder, struct utf_holder, long);
 FT_Vector xcbft_load_glyph(xcb_connection_t *, xcb_render_glyphset_t,
 	FT_Face, int);
+long xcbft_get_dpi(xcb_connection_t *);
 
 
 /*
@@ -107,7 +110,7 @@ xcbft_query_fontsearch(FcChar8 *fontquery)
 struct xcbft_face_holder
 xcbft_query_by_char_support(FcChar32 character,
 		const FcPattern *copy_pattern,
-		FT_Library library)
+		FT_Library library, long dpi)
 {
 	FcBool status;
 	FcResult result;
@@ -157,7 +160,7 @@ xcbft_query_by_char_support(FcChar32 character,
 	patterns.length = 1;
 	patterns.patterns[0] = pat_output;
 
-	faces = xcbft_load_faces(patterns);
+	faces = xcbft_load_faces(patterns, dpi);
 
 	// cleanup
 	xcbft_patterns_holder_destroy(patterns);
@@ -211,7 +214,7 @@ xcbft_query_fontsearch_all(FcStrSet *queries)
 }
 
 struct xcbft_face_holder
-xcbft_load_faces(struct xcbft_patterns_holder patterns)
+xcbft_load_faces(struct xcbft_patterns_holder patterns, long dpi)
 {
 	int i;
 	struct xcbft_face_holder faces;
@@ -230,6 +233,7 @@ xcbft_load_faces(struct xcbft_patterns_holder patterns)
 
 	// allocate the same size as patterns as it should be <= its length
 	faces.faces = malloc(sizeof(FT_Face)*patterns.length);
+
 	for (i = 0; i < patterns.length; i++) {
 		// get the information needed from the pattern
 		result = FcPatternGet(patterns.patterns[i], FC_FILE, 0, &fc_file);
@@ -294,13 +298,11 @@ xcbft_load_faces(struct xcbft_patterns_holder patterns)
 		//	0, // width
 		//	fc_pixel_size.u.i); // height
 
-		// TODO get screen resolution or pass as parameter or
-		// using Xresources (xrm) xcb_xrm_resource_get_string Xft.dpi
-		// pixel_size/ (resolution/72.0)
+		// pixel_size/ (dpi/72.0)
 		FT_Set_Char_Size(
 			faces.faces[faces.length], 0,
-			(fc_pixel_size.u.d/(96.0/72.0))*64,
-			96, 96);
+			(fc_pixel_size.u.d/((double)dpi/72.0))*64,
+			dpi, dpi);
 		if (error != FT_Err_Ok) {
 			perror(NULL);
 			fprintf(stderr, "could not char size");
@@ -373,7 +375,8 @@ xcbft_draw_text(
 	int16_t x, int16_t y, // x, y
 	struct utf_holder text, // text
 	xcb_render_color_t color,
-	struct xcbft_face_holder faces)
+	struct xcbft_face_holder faces,
+	long dpi)
 {
 	xcb_void_cookie_t cookie;
 	uint32_t values[2];
@@ -412,7 +415,7 @@ xcbft_draw_text(
 	// load all the glyphs in a glyphset
 	// TODO: maybe cache the xcb_render_glyphset_t
 	struct xcbft_glyphset_and_advance glyphset_advance =
-		xcbft_load_glyphset(c, faces, text);
+		xcbft_load_glyphset(c, faces, text, dpi);
 
 	// we now have a text stream - a bunch of glyphs basically
 	xcb_render_util_composite_text_stream_t *ts =
@@ -494,7 +497,8 @@ struct xcbft_glyphset_and_advance
 xcbft_load_glyphset(
 	xcb_connection_t *c,
 	struct xcbft_face_holder faces,
-	struct utf_holder text)
+	struct utf_holder text,
+	long dpi)
 {
 	int i, j;
 	int glyph_index;
@@ -535,7 +539,7 @@ xcbft_load_glyphset(
 			faces_for_unsupported = xcbft_query_by_char_support(
 					text.str[i],
 					NULL,
-					faces.library);
+					faces.library, dpi);
 			if (faces_for_unsupported.length == 0) {
 				fprintf(stderr,
 					"No faces found supporting character: %02x\n",
@@ -547,8 +551,8 @@ xcbft_load_glyphset(
 			} else {
 				FT_Set_Char_Size(
 						faces_for_unsupported.faces[0],
-						0, (faces.faces[0]->size->metrics.x_ppem/(96.0/72.0))*64,
-						96, 96);
+						0, (faces.faces[0]->size->metrics.x_ppem/((double)dpi/72.0))*64,
+						dpi, dpi);
 
 				glyph_advance = xcbft_load_glyph(c, gs,
 					faces_for_unsupported.faces[0],
@@ -608,6 +612,34 @@ xcbft_load_glyph(
 
 	xcb_flush(c);
 	return glyph_advance;
+}
+
+long
+xcbft_get_dpi(xcb_connection_t *c)
+{
+	int i;
+	long dpi;
+	xcb_xrm_database_t *xrm_db;
+
+	i = 0;
+	// default to something common just in case everything else fails
+	dpi = 96;
+	xrm_db = xcb_xrm_database_from_default(c);
+	if (xrm_db != NULL) {
+		i = xcb_xrm_resource_get_long(xrm_db, "Xft.dpi", NULL, &dpi);
+		if (i < 0) {
+			fprintf(stderr,
+				"Could not fetch value of Xft.dpi from Xresources falling back to lowest dpi found");
+		}
+		xcb_xrm_database_free(xrm_db);
+	}
+	if ( xrm_db == NULL || i < 0) {
+		fprintf(stderr,
+			"Could not open Xresources database falling back to lowest dpi found");
+		// TODO loop through the dpi from the screens
+	}
+
+	return dpi;
 }
 
 #endif // _XCBFT

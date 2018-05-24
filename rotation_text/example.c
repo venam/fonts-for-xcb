@@ -71,7 +71,8 @@ main(int argc, char **argv)
 	text = char_to_uint32("Héllo ༃𐤋𐤊탄ཀ𐍊");
 	font_patterns = xcbft_query_fontsearch_all(fontsearch);
 	FcStrSetDestroy(fontsearch);
-	faces = xcbft_load_faces(font_patterns);
+	long dpi = xcbft_get_dpi(c);
+	faces = xcbft_load_faces(font_patterns, dpi);
 	xcbft_patterns_holder_destroy(font_patterns);
 
 	// XXX: DEBUG
@@ -132,7 +133,8 @@ main(int argc, char **argv)
 		50, 60, // x, y
 		text, // text
 		text_color,
-		faces); // faces
+		faces,
+		dpi);
 	printf("advance: %ld\n", advance.x);
 	// draw a rectangle at that place to know the advance was
 	// calculated properly

@@ -56,8 +56,10 @@ fontsearch = xcbft_extract_fontsearch_list(searchlist);
 font_patterns = xcbft_query_fontsearch_all(fontsearch);
 // no need for the fonts list anymore
 FcStrSetDestroy(fontsearch);
+// get the dpi from the resources or the screen if not available
+long dpi = xcbft_get_dpi(c);
 // load the faces related to the matching fonts patterns
-faces = xcbft_load_faces(font_patterns);
+faces = xcbft_load_faces(font_patterns, dpi);
 // no need for the matching fonts patterns
 xcbft_patterns_holder_destroy(font_patterns);
 
@@ -68,14 +70,15 @@ text_color.blue = 0x4242;
 text_color.alpha = 0xFFFF;
 
 // draw on the drawable (pixmap here) pmap at position (50,60) the text
-with the color we chose and the faces we chose
+// with the color we chose and the faces we chose
 xcbft_draw_text(
 	c, // X connection
 	pmap, // win or pixmap
 	50, 60, // x, y
 	text, // text
 	text_color,
-	faces); // faces
+	faces,
+	dpi);
 
 // no need for the text and the faces
 utf_holder_destroy(text);
@@ -85,5 +88,5 @@ xcbft_face_holder_destroy(faces);
 
 ```
 
-Depends on : `xcb xcb-render xcb-renderutil freetype2 fontconfig`  
+Depends on : `xcb xcb-render xcb-renderutil xcb-xrm freetype2 fontconfig`  
 

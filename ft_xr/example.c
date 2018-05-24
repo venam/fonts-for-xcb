@@ -42,7 +42,8 @@ main(int argc, char **argv)
 	text = char_to_uint32("Héllo ༃𐤋𐤊탄ཀ𐍊");
 	font_patterns = xcbft_query_fontsearch_all(fontsearch);
 	FcStrSetDestroy(fontsearch);
-	faces = xcbft_load_faces(font_patterns);
+	long dpi = xcbft_get_dpi(c);
+	faces = xcbft_load_faces(font_patterns, dpi);
 	xcbft_patterns_holder_destroy(font_patterns);
 
 	// XXX: DEBUG
@@ -70,6 +71,7 @@ main(int argc, char **argv)
 			screen->root_visual,           /* visual        */
 			mask, values);                 /* masks         */
 
+	xcb_map_window_checked(c, win);
 	// graphic context with xyz color
 	gc = xcb_generate_id(c);
 	mask = XCB_GC_FOREGROUND | XCB_GC_GRAPHICS_EXPOSURES;
@@ -103,7 +105,8 @@ main(int argc, char **argv)
 		50, 60, // x, y
 		text, // text
 		text_color,
-		faces); // faces
+		faces,
+		dpi);
 	printf("advance: %ld\n", advance.x);
 	// draw a rectangle at that place to know the advance was
 	// calculated properly
@@ -120,7 +123,6 @@ main(int argc, char **argv)
 	// TODO: end of tricky part
 
 	// show the window and start the event loop
-	xcb_map_window_checked(c, win);
 	xcb_flush(c);
 
 	while ((e = xcb_wait_for_event(c))) {
