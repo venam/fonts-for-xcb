@@ -98,11 +98,11 @@ xcbft_query_fontsearch(FcChar8 *fontquery)
  * Query a font based on character support
  * Optionally pass a pattern that it'll use as the base for the search
  *
- * TODO: fallback of font added to the list or somehow done when drawing,
- *       to do that we need to search by the charset we want to draw
- *       and if they are in one of the font already specified, thus need to
- *       know what the users want to insert as text. This needs more thinking
- *       to be decoupled.
+ * fallback of font added to the list or somehow done when drawing,
+ * to do that we need to search by the charset we want to draw
+ * and if they are in one of the font already specified, thus need to
+ * know what the users want to insert as text. This needs more thinking
+ * to be decoupled.
 
 	Assumes the ft2 library is already loaded
 	Assumes the face will be cleaned outside
@@ -511,6 +511,7 @@ xcbft_load_glyphset(
 
 	total_advance.x = total_advance.y = 0;
 	glyph_index = 0;
+	faces_for_unsupported.length = 0;
 	// create a glyphset with a specific format
 	fmt_a8 = xcb_render_util_find_standard_format(
 		fmt_rep,
@@ -532,12 +533,24 @@ xcbft_load_glyphset(
 			total_advance.x += glyph_advance.x;
 			total_advance.y += glyph_advance.y;
 		} else {
-		// fallback
-			// TODO pass at least some of the query (font
-			// size, italic, etc..)
-			faces_for_unsupported = xcbft_query_by_char_support(
+			// fallback
+			// TODO pass at least some of the query (font size, italic, etc..)
+
+			glyph_index = 0;
+			// check if we already loaded that face as fallback
+			if (faces_for_unsupported.length > 0) {
+				glyph_index = FT_Get_Char_Index(
+					faces_for_unsupported.faces[0],
+					text.str[i]);
+			}
+			if (glyph_index == 0) {
+				if (faces_for_unsupported.length > 0) {
+					xcbft_face_holder_destroy(faces_for_unsupported);
+				}
+				faces_for_unsupported = xcbft_query_by_char_support(
 					text.str[i],
 					NULL, dpi);
+			}
 			if (faces_for_unsupported.length == 0) {
 				fprintf(stderr,
 					"No faces found supporting character: %02x\n",
@@ -557,10 +570,11 @@ xcbft_load_glyphset(
 					text.str[i]);
 				total_advance.x += glyph_advance.x;
 				total_advance.y += glyph_advance.y;
-
-				xcbft_face_holder_destroy(faces_for_unsupported);
 			}
 		}
+	}
+	if (faces_for_unsupported.length > 0) {
+		xcbft_face_holder_destroy(faces_for_unsupported);
 	}
 
 	glyphset_advance.advance = total_advance;
