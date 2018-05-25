@@ -38,7 +38,7 @@ struct xcbft_glyphset_and_advance {
 // signatures
 FcPattern* xcbft_query_fontsearch(FcChar8 *);
 struct xcbft_face_holder xcbft_query_by_char_support(
-		FcChar32, const FcPattern *, FT_Library, long);
+		FcChar32, const FcPattern *, long);
 struct xcbft_patterns_holder xcbft_query_fontsearch_all(FcStrSet *);
 struct xcbft_face_holder xcbft_load_faces(
 	struct xcbft_patterns_holder, long);
@@ -109,8 +109,7 @@ xcbft_query_fontsearch(FcChar8 *fontquery)
  */
 struct xcbft_face_holder
 xcbft_query_by_char_support(FcChar32 character,
-		const FcPattern *copy_pattern,
-		FT_Library library, long dpi)
+		const FcPattern *copy_pattern, long dpi)
 {
 	FcBool status;
 	FcResult result;
@@ -500,7 +499,7 @@ xcbft_load_glyphset(
 	struct utf_holder text,
 	long dpi)
 {
-	int i, j;
+	unsigned int i, j;
 	int glyph_index;
 	xcb_render_glyphset_t gs;
 	xcb_render_pictforminfo_t *fmt_a8;
@@ -538,8 +537,7 @@ xcbft_load_glyphset(
 			// size, italic, etc..)
 			faces_for_unsupported = xcbft_query_by_char_support(
 					text.str[i],
-					NULL,
-					faces.library, dpi);
+					NULL, dpi);
 			if (faces_for_unsupported.length == 0) {
 				fprintf(stderr,
 					"No faces found supporting character: %02x\n",
