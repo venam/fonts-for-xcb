@@ -629,13 +629,13 @@ xcbft_get_dpi(xcb_connection_t *c)
 		xcb_xrm_database_free(xrm_db);
 		if (i < 0) {
 			fprintf(stderr,
-				"Could not fetch value of Xft.dpi from Xresources falling back to highest dpi found");
+				"Could not fetch value of Xft.dpi from Xresources falling back to highest dpi found\n");
 		} else {
 			return dpi;
 		}
 	} else {
 		fprintf(stderr,
-			"Could not open Xresources database falling back to highest dpi found");
+			"Could not open Xresources database falling back to highest dpi found\n");
 	}
 
 	iter = xcb_setup_roots_iterator(xcb_get_setup(c));
@@ -666,6 +666,9 @@ xcbft_get_dpi(xcb_connection_t *c)
 
 	if (dpi == 0) {
 		// if everything fails use 96
+		fprintf(stderr,
+			"Could get highest dpi, using 96 as default\n");
+
 		dpi = 96;
 	}
 
