@@ -36,11 +36,13 @@ main(int argc, char **argv)
 		return 1;
 	}
 
-    char *searchlist = "times:style=bold:pixelsize=30,monospace:pixelsize=40\n";
+    char *searchlist = "times:style=bold:pixelsize=20,monospace:pixelsize=20\n";
 	fontsearch = xcbft_extract_fontsearch_list(searchlist);
 	// test fallback support also
 	text = char_to_uint32("Héllo ༃𐤋𐤊탄ཀ𐍊");
 	font_patterns = xcbft_query_fontsearch_all(fontsearch);
+	double pix_size = xcbft_get_pixel_size(font_patterns);
+	printf("pixel size: %f\n", pix_size);
 	FcStrSetDestroy(fontsearch);
 	long dpi = xcbft_get_dpi(c);
 	faces = xcbft_load_faces(font_patterns, dpi);
@@ -116,8 +118,33 @@ main(int argc, char **argv)
 	xcb_change_gc(c, gc, mask, values);
 	rectangles[0].x = 50+advance.x;
 	rectangles[0].y = 60;
-	rectangles[0].width = 10;
-	rectangles[0].height = 10;
+	rectangles[0].width = 5;
+	rectangles[0].height = 5;
+	xcb_poly_fill_rectangle(c, pmap, gc, 1, rectangles);
+
+	// let's see if we can enclose the text using only pixel size
+	mask = XCB_GC_FOREGROUND | XCB_GC_GRAPHICS_EXPOSURES;
+	values[0] = 0x00FF00 | 0xff000000;
+	values[1] = 0;
+	xcb_change_gc(c, gc, mask, values);
+	// top left
+	rectangles[0].x = 50-pix_size*0.2;
+	rectangles[0].y = 60-pix_size-pix_size*0.2;
+	xcb_poly_fill_rectangle(c, pmap, gc, 1, rectangles);
+
+	// bottom left
+	rectangles[0].x = 50-pix_size*0.2;
+	rectangles[0].y = 60+pix_size*0.2;
+	xcb_poly_fill_rectangle(c, pmap, gc, 1, rectangles);
+
+	// bottom right
+	rectangles[0].x = 50+advance.x+pix_size*0.2;
+	rectangles[0].y = 60+pix_size*0.2;
+	xcb_poly_fill_rectangle(c, pmap, gc, 1, rectangles);
+
+	// top right
+	rectangles[0].x = 50+advance.x+pix_size*0.2;
+	rectangles[0].y = 60-pix_size-pix_size*0.2;
 	xcb_poly_fill_rectangle(c, pmap, gc, 1, rectangles);
 
 	// TODO: end of tricky part

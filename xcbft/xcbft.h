@@ -40,6 +40,7 @@ FcPattern* xcbft_query_fontsearch(FcChar8 *);
 struct xcbft_face_holder xcbft_query_by_char_support(
 		FcChar32, const FcPattern *, long);
 struct xcbft_patterns_holder xcbft_query_fontsearch_all(FcStrSet *);
+double xcbft_get_pixel_size(struct xcbft_patterns_holder patterns);
 struct xcbft_face_holder xcbft_load_faces(
 	struct xcbft_patterns_holder, long);
 FcStrSet* xcbft_extract_fontsearch_list(char *);
@@ -212,6 +213,33 @@ xcbft_query_fontsearch_all(FcStrSet *queries)
 	return font_patterns;
 }
 
+// There's no way to predict the width and height of every characters
+// as they can go outside the em, so let's just use whatever we have as
+// the biggest pixel size so far in all the loaded patterns
+double
+xcbft_get_pixel_size(struct xcbft_patterns_holder patterns)
+{
+	int i;
+	double maximum_pix_size;
+	FcValue fc_pixel_size;
+	FcResult result;
+
+	maximum_pix_size = 0;
+	for (i = 0; i < patterns.length; i++) {
+		result = FcPatternGet(patterns.patterns[i], FC_PIXEL_SIZE, 0, &fc_pixel_size);
+		if (result != FcResultMatch || fc_pixel_size.u.d == 0) {
+			fprintf(stderr, "font has no pixel size, using 12 by default");
+			fc_pixel_size.type = FcTypeInteger;
+			fc_pixel_size.u.d = 12.0;
+		}
+		if (fc_pixel_size.u.d > maximum_pix_size) {
+			maximum_pix_size = fc_pixel_size.u.d;
+		}
+	}
+
+	return maximum_pix_size;
+}
+
 struct xcbft_face_holder
 xcbft_load_faces(struct xcbft_patterns_holder patterns, long dpi)
 {
@@ -290,12 +318,12 @@ xcbft_load_faces(struct xcbft_patterns_holder patterns, long dpi)
 		if (result != FcResultMatch || fc_pixel_size.u.d == 0) {
 			fprintf(stderr, "font has no pixel size, using 12 by default");
 			fc_pixel_size.type = FcTypeInteger;
-			fc_pixel_size.u.i = 12;
+			fc_pixel_size.u.d = 12;
 		}
 		//error = FT_Set_Pixel_Sizes(
 		//	faces.faces[faces.length],
 		//	0, // width
-		//	fc_pixel_size.u.i); // height
+		//	fc_pixel_size.u.d); // height
 
 		// pixel_size/ (dpi/72.0)
 		FT_Set_Char_Size(
@@ -324,21 +352,27 @@ xcbft_extract_fontsearch_list(char *string)
 	FcBool result = FcFalse;
 	char *r = strdup(string);
 	char *p_to_r = r;
+	char *token = NULL;
 
 	fontsearch = FcStrSetCreate();
 
-	while ( (fontquery = (FcChar8*)strsep(&r,",")) != NULL ) {
+	token = strtok(r, ",");
+	while (token != NULL) {
+		fontquery = (FcChar8*)token;
 		result = FcStrSetAdd(fontsearch, fontquery);
 		if (result == FcFalse) {
 			fprintf(stderr,
 				"Couldn't add fontquery to fontsearch set");
 		}
+		token = strtok(NULL, ",");
 	}
 
 	free(p_to_r);
 
 	return fontsearch;
 }
+
+
 
 void
 xcbft_patterns_holder_destroy(struct xcbft_patterns_holder patterns)
@@ -366,7 +400,6 @@ xcbft_face_holder_destroy(struct xcbft_face_holder faces)
 	FT_Done_FreeType(faces.library);
 }
 
-// TODO: return the x (y for vertical) position reached at the end of the text
 FT_Vector
 xcbft_draw_text(
 	xcb_connection_t *c, // conn
@@ -607,6 +640,12 @@ xcbft_load_glyph(
 	glyph_advance.y = face->glyph->advance.y/64;
 	ginfo.x_off = glyph_advance.x;
 	ginfo.y_off = glyph_advance.y;
+
+	// keep track of the max horiBearingY (yMax) and yMin
+	// 26.6 fractional pixel format
+	// yMax = face->glyph->metrics.horiBearingY/64; (yMax);
+	// yMin = -(face->glyph->metrics.height -
+	//		face->glyph->metrics.horiBearingY)/64;
 
 	gid = charcode;
 
