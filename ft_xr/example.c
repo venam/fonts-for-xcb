@@ -138,12 +138,12 @@ main(int argc, char **argv)
 	xcb_poly_fill_rectangle(c, pmap, gc, 1, rectangles);
 
 	// bottom right using pix_size
-	rectangles[0].x = 50+(pix_size*text.length/2.0)+pix_size*0.4;
+	rectangles[0].x = 50+(pix_size*text.length/1.6)+pix_size*0.5;
 	rectangles[0].y = 60+pix_size*0.2;
 	xcb_poly_fill_rectangle(c, pmap, gc, 1, rectangles);
 
 	// top right using pix_size
-	rectangles[0].x = 50+(pix_size*text.length/2.0)+pix_size*0.4;
+	rectangles[0].x = 50+(pix_size*text.length/1.6)+pix_size*0.5;
 	rectangles[0].y = 60-pix_size-pix_size*0.2;
 	xcb_poly_fill_rectangle(c, pmap, gc, 1, rectangles);
 
