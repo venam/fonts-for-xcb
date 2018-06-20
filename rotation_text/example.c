@@ -65,6 +65,7 @@ main(int argc, char **argv)
 		return 1;
 	}
 
+	xcbft_init();
     char *searchlist = "times:style=bold:pixelsize=30,monospace:pixelsize=40\n";
 	fontsearch = xcbft_extract_fontsearch_list(searchlist);
 	// test fallback support also
@@ -272,6 +273,7 @@ endloop:
 
 	utf_holder_destroy(text);
 	xcbft_face_holder_destroy(faces);
+	xcbft_done();
 	return 0;
 }
 

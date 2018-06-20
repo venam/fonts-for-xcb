@@ -36,6 +36,8 @@ struct xcbft_glyphset_and_advance {
 };
 
 // signatures
+bool xcbft_init(void);
+void xcbft_done(void);
 FcPattern* xcbft_query_fontsearch(FcChar8 *);
 struct xcbft_face_holder xcbft_query_by_char_support(
 		FcChar32, const FcPattern *, long);
@@ -57,6 +59,24 @@ FT_Vector xcbft_load_glyph(xcb_connection_t *, xcb_render_glyphset_t,
 	FT_Face, int);
 long xcbft_get_dpi(xcb_connection_t *);
 
+void
+xcbft_done(void)
+{
+	FcFini();
+}
+
+bool
+xcbft_init(void)
+{
+	FcBool status;
+
+	status = FcInit();
+	if (status == FcFalse) {
+		fprintf(stderr, "Could not initialize fontconfig");
+	}
+
+	return status == FcTrue;
+}
 
 /*
  * Do the font queries through fontconfig and return the info
@@ -172,19 +192,12 @@ xcbft_query_by_char_support(FcChar32 character,
 struct xcbft_patterns_holder
 xcbft_query_fontsearch_all(FcStrSet *queries)
 {
-	FcBool status;
 	struct xcbft_patterns_holder font_patterns;
 	FcPattern *font_pattern;
 	uint8_t current_allocated;
 
 	font_patterns.patterns = NULL;
 	font_patterns.length = 0;
-
-	status = FcInit();
-	if (status == FcFalse) {
-		fprintf(stderr, "Could not initialize fontconfig");
-		return font_patterns;
-	}
 
 	// start with 5, expand if needed
 	current_allocated = 5;
@@ -383,7 +396,7 @@ xcbft_patterns_holder_destroy(struct xcbft_patterns_holder patterns)
 		FcPatternDestroy(patterns.patterns[i]);
 	}
 	free(patterns.patterns);
-	FcFini();
+	// FcFini(); // TODO: we can't leave that here, find a way for cleanup
 }
 
 void
