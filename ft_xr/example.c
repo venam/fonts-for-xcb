@@ -2,52 +2,6 @@
 
 #include "../xcbft/xcbft.h"
 
-xcb_pixmap_t
-xcbft_create_text_pixmap(
-	xcb_connection_t *c,
-	struct utf_holder text,
-	xcb_render_color_t text_color,
-	xcb_render_color_t background_color,
-	struct xcbft_patterns_holder font_patterns,
-	long dpi)
-{
-	xcb_pixmap_t pmap;
-	xcb_screen_t *screen;
-	screen = xcb_setup_roots_iterator(xcb_get_setup(c)).data;
-	struct xcbft_face_holder faces;
-	double pix_size = 12;
-	
-	pix_size = xcbft_get_pixel_size(font_patterns);
-	pmap = xcb_generate_id(c);
-	faces = xcbft_load_faces(font_patterns, dpi);
-
-	xcb_create_pixmap(c,
-		screen->root_depth,
-		pmap,
-		screen->root, // doesn't matter
-		(pix_size*text.length/1.6)+pix_size*0.7,
-		pix_size+pix_size*0.4
-	);
-
-	// TODO draw background on pixmap
-
-	/*FT_Vector advance = */
-	xcbft_draw_text(
-		c,
-		pmap, // win or pixmap
-		0.2*pix_size, 0.2*pix_size, // x, y
-		text, // text
-		text_color,
-		faces,
-		dpi);
-
-	// TODO resize the pixmap (copy unto pixmap of appropriate size
-
-	xcbft_face_holder_destroy(faces);
-
-	return pmap;
-}
-
 int
 main(int argc, char **argv)
 {
@@ -92,15 +46,16 @@ main(int argc, char **argv)
     char *searchlist = "times:style=bold:pixelsize=20,monospace:pixelsize=20\n";
 	fontsearch = xcbft_extract_fontsearch_list(searchlist);
 	// test fallback support also
-	text = char_to_uint32("Héllo ༃𐤋𐤊탄ཀ𐍊");
+	//text = char_to_uint32("Héllo ༃𐤋𐤊탄ཀ𐍊");
+	text = char_to_uint32("Héllo World");
 	font_patterns = xcbft_query_fontsearch_all(fontsearch);
 
 	long dpi = xcbft_get_dpi(c);
+	xcb_render_color_t back_color = { .red = 0x90FF, .green = 0x90FF, .blue = 0x90FF };
 	xcb_pixmap_t pipixamap = xcbft_create_text_pixmap(c, text,
 		text_color,
-		text_color, // TODO, use the right color when implementing
+		back_color,
 		font_patterns, dpi);
-	xcb_free_pixmap(c, pipixamap);
 
 	double pix_size = xcbft_get_pixel_size(font_patterns);
 	faces = xcbft_load_faces(font_patterns, dpi);
@@ -238,6 +193,18 @@ main(int argc, char **argv)
 		0,    /* Top left y coordinate of the region where to copy */
 		300,  /* Width of the region to copy */
 		300); /* Height of the region to copy */
+
+	xcb_copy_area(c, /* xcb_connection_t */
+		pipixamap, /* The Drawable we want to paste */
+		win,  /* The Drawable on which we copy the previous Drawable */
+		gc,   /* A Graphic Context */
+		0,    /* Top left x coordinate of the region to copy */
+		0,    /* Top left y coordinate of the region to copy */
+		20,    /* Top left x coordinate of the region where to copy */
+		180,    /* Top left y coordinate of the region where to copy */
+		300,  /* Width of the region to copy */
+		300); /* Height of the region to copy */
+
 			xcb_flush(c);
 			break;
 		case XCB_KEY_PRESS: {
@@ -259,6 +226,7 @@ endloop:
         if (e) free(e);
 
 	xcb_free_pixmap(c, pmap);
+	xcb_free_pixmap(c, pipixamap);
 	xcb_free_gc(c, gc);
 	xcb_disconnect(c);
 	// XXX: DEBUG

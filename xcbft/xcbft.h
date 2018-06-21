@@ -58,6 +58,10 @@ struct xcbft_glyphset_and_advance xcbft_load_glyphset(xcb_connection_t *,
 FT_Vector xcbft_load_glyph(xcb_connection_t *, xcb_render_glyphset_t,
 	FT_Face, int);
 long xcbft_get_dpi(xcb_connection_t *);
+xcb_pixmap_t xcbft_create_text_pixmap(xcb_connection_t *,
+	struct utf_holder, xcb_render_color_t, xcb_render_color_t,
+	struct xcbft_patterns_holder, long);
+static uint32_t xcb_color_to_uint32(xcb_render_color_t);
 
 void
 xcbft_done(void)
@@ -76,6 +80,73 @@ xcbft_init(void)
 	}
 
 	return status == FcTrue;
+}
+
+// Inspired by https://www.codeproject.com/Articles/1202772/Color-Topics-for-Programmers
+static uint32_t
+xcb_color_to_uint32(xcb_render_color_t rgb)
+{
+	uint32_t sm1 = 65536 - 1; // from 2^16
+	uint32_t scale = 256; // to 2^8
+
+	return
+		  (uint32_t) ( ((double)rgb.red/sm1   * (scale-1)) * scale * scale)
+		+ (uint32_t) ( ((double)rgb.green/sm1 * (scale-1)) * scale)
+		+ (uint32_t) ( ((double)rgb.blue/sm1  * (scale-1)) );
+}
+
+xcb_pixmap_t
+xcbft_create_text_pixmap(
+	xcb_connection_t *c,
+	struct utf_holder text,
+	xcb_render_color_t text_color,
+	xcb_render_color_t background_color,
+	struct xcbft_patterns_holder font_patterns,
+	long dpi)
+{
+	xcb_pixmap_t pmap, resize_pmap;
+	xcb_screen_t *screen;
+	screen = xcb_setup_roots_iterator(xcb_get_setup(c)).data;
+	struct xcbft_face_holder faces;
+	double pix_size = 12;
+	uint32_t mask = 0;
+	uint32_t values[2];
+	xcb_gcontext_t gc;
+	
+	pix_size = xcbft_get_pixel_size(font_patterns);
+	pmap = xcb_generate_id(c);
+	faces = xcbft_load_faces(font_patterns, dpi);
+
+	// 0.2 being the factor padding on both side
+	// 0.3 being the extra factor padding for the width protection
+	uint16_t width = (pix_size*text.length/1.6)+pix_size*0.7;
+	uint16_t height = pix_size+pix_size*0.4;
+
+	xcb_create_pixmap(c, screen->root_depth, pmap, screen->root, width, height);
+
+	xcb_rectangle_t rectangles[] = { { .x = 0, .y = 0,
+			.width = width, .height = height } };
+	gc = xcb_generate_id(c);
+	mask = XCB_GC_FOREGROUND | XCB_GC_GRAPHICS_EXPOSURES;
+	values[0] = xcb_color_to_uint32(background_color) | 0xff000000;
+	values[1] = 0;
+	xcb_create_gc(c, gc, pmap, mask, values);
+	// draw a rectangle filling the whole pixmap with a single color
+	xcb_poly_fill_rectangle(c, pmap, gc, 1, rectangles);
+
+	FT_Vector advance = xcbft_draw_text(c, pmap,
+		0.2*pix_size, 0.2*pix_size+pix_size, // x, y
+		text, text_color, faces, dpi);
+
+	resize_pmap = xcb_generate_id(c);
+	width = advance.x+pix_size*0.4; // 0.2 on both sides
+	xcb_create_pixmap(c, screen->root_depth, resize_pmap, screen->root, width, height);
+	xcb_copy_area(c, pmap, resize_pmap, gc, 0, 0, 0, 0, width, height);
+
+	xcb_free_pixmap(c, pmap);
+	xcbft_face_holder_destroy(faces);
+
+	return resize_pmap;
 }
 
 /*
