@@ -28,6 +28,8 @@ create_same_size_pixmap(xcb_connection_t *c, xcb_drawable_t drawable)
 		geom->height
 	);
 
+	free(geom);
+
 	return pmap;
 }
 

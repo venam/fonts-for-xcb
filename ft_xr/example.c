@@ -2,6 +2,28 @@
 
 #include "../xcbft/xcbft.h"
 
+xcb_rectangle_t
+get_drawable_size(xcb_connection_t *c, xcb_drawable_t drawable)
+{
+	xcb_get_geometry_cookie_t cookie;
+	xcb_generic_error_t *e;
+	xcb_get_geometry_reply_t *geom;
+	xcb_rectangle_t sizes;
+
+	cookie = xcb_get_geometry(c, drawable);
+	geom = xcb_get_geometry_reply(c, cookie, &e);
+
+	sizes.width = geom->width;
+	sizes.height = geom->height;
+	sizes.x = geom->x;
+	sizes.y = geom->y;
+
+	free(geom);
+
+	return sizes;
+}
+
+
 int
 main(int argc, char **argv)
 {
@@ -56,6 +78,7 @@ main(int argc, char **argv)
 		text_color,
 		back_color,
 		font_patterns, dpi);
+	xcb_rectangle_t p_size = get_drawable_size(c, pipixamap);
 
 	double pix_size = xcbft_get_pixel_size(font_patterns);
 	faces = xcbft_load_faces(font_patterns, dpi);
@@ -202,8 +225,8 @@ main(int argc, char **argv)
 		0,    /* Top left y coordinate of the region to copy */
 		20,    /* Top left x coordinate of the region where to copy */
 		180,    /* Top left y coordinate of the region where to copy */
-		300,  /* Width of the region to copy */
-		300); /* Height of the region to copy */
+		p_size.width,  /* Width of the region to copy */
+		p_size.height); /* Height of the region to copy */
 
 			xcb_flush(c);
 			break;
